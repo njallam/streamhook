@@ -18,6 +18,10 @@ with open("streamers.json") as f:
 db = shelve.open("shelve.db")
 discord_session = requests.Session()
 
+# HACK: Use same session for twitch
+twitch_session = requests.Session()
+requests.Session = lambda: twitch_session
+
 helix = twitch.Helix(
     os.environ.get("TWITCH_CLIENT_ID"), os.environ.get("TWITCH_CLIENT_SECRET")
 )
