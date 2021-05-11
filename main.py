@@ -38,7 +38,7 @@ def edit_webhook(url, id, webhook):
 def edit_was_live(user_login, streamer):
     webhook = {"content": streamer["was_live_message"], 'embeds':[]}
     try:
-        edit_webhook(streamer["webhook_url"], db[k]["message_id"], webhook)
+        edit_webhook(streamer["webhook_url"], db[user_login]["message_id"], webhook)
         del db[user_login]
     except:
         print("Webhook edit failed")
