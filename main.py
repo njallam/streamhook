@@ -41,10 +41,16 @@ def edit_was_live(user_login, streamer):
 
 
 while True:
-    streams = {
-        stream.data["user_login"]: stream
-        for stream in helix.streams(user_login=streamers.keys())
-    }
+    streams = {}
+    try:
+        streams = {
+            stream.data["user_login"]: stream
+            for stream in helix.streams(user_login=streamers.keys())
+        }
+    except twitch.helix.resources.streams.StreamNotFound:
+        pass
+    except:
+        print("Get streams failed")
 
     for k, v in streamers.items():
         if k in streams.keys():
