@@ -6,6 +6,7 @@ import signal
 import sys
 import time
 import twitch
+from datetime import date, datetime
 from dotenv import load_dotenv
 
 signal.signal(signal.SIGINT, lambda *args: sys.exit(0))
@@ -27,6 +28,10 @@ helix = twitch.Helix(
 )
 
 
+def log(message):
+    print(datetime.now(), "|", message)
+
+
 def create_webhook(url, webhook):
     return discord_session.post(url, json=webhook, params={"wait": True})
 
@@ -36,12 +41,12 @@ def edit_webhook(url, id, webhook):
 
 
 def edit_was_live(user_login, streamer):
-    webhook = {"content": streamer["was_live_message"], 'embeds':[]}
+    webhook = {"content": streamer["was_live_message"], "embeds": []}
     try:
         edit_webhook(streamer["webhook_url"], db[user_login]["message_id"], webhook)
         del db[user_login]
     except:
-        print("Webhook edit failed")
+        log("Webhook edit failed")
 
 
 while True:
@@ -54,7 +59,7 @@ while True:
     except twitch.helix.resources.streams.StreamNotFound:
         pass
     except:
-        print("Get streams failed")
+        log("Get streams failed")
 
     for k, v in streamers.items():
         if k in streams.keys():
@@ -66,7 +71,7 @@ while True:
                 "embeds": [
                     {
                         "title": stream.title,
-                        "color": 0x6441a4,
+                        "color": 0x6441A4,
                         "timestamp": started_at,
                         "url": stream_url,
                         "image": {
@@ -90,15 +95,17 @@ while True:
                 ],
             }
             if k in db.keys() and started_at == db[k]["started_at"]:
-                print(f"{k} | STILL LIVE")
+                log(f"{k} | STILL LIVE")
                 try:
-                    response = edit_webhook(v["webhook_url"], db[k]["message_id"], webhook)
+                    response = edit_webhook(
+                        v["webhook_url"], db[k]["message_id"], webhook
+                    )
                     if response.status_code == 404:
                         del db[k]
                 except:
-                    print("Webhook edit failed")
+                    log("Webhook edit failed")
             if k not in db.keys():
-                print(f"{k} | NOW LIVE")
+                log(f"{k} | NOW LIVE")
                 if k in db.keys() and "message_id" in db[k]:
                     edit_was_live(k, v)
                 try:
@@ -108,9 +115,9 @@ while True:
                         "started_at": started_at,
                     }
                 except:
-                    print("Webhook create failed")
+                    log("Webhook create failed")
         else:
             if k in db.keys() and "message_id" in db[k]:
-                print(f"{k} | WAS LIVE")
+                log(f"{k} | WAS LIVE")
                 edit_was_live(k, v)
     time.sleep(30)
