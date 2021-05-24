@@ -61,19 +61,18 @@ while True:
     except:
         log("Get streams failed")
 
-    for k, v in streamers.items():
-        if k in streams.keys():
-            stream_url = f"https://twitch.tv/{k}"
-            stream = streams[k]
+    for user_login, streamer in streamers.items():
+        if user_login in streams.keys():
+            stream = streams[user_login]
             started_at = stream.data["started_at"]
             webhook = {
-                "content": v["now_live_message"],
+                "content": streamer["now_live_message"],
                 "embeds": [
                     {
                         "title": stream.title,
                         "color": 0x6441A4,
                         "timestamp": started_at,
-                        "url": stream_url,
+                        "url": f"https://twitch.tv/{user_login}",
                         "image": {
                             "url": stream.thumbnail_url.replace(
                                 "{width}", "426"
@@ -94,30 +93,31 @@ while True:
                     }
                 ],
             }
-            if k in db.keys() and started_at == db[k]["started_at"]:
-                log(f"{k} | STILL LIVE")
+            if user_login in db.keys() and started_at == db[user_login]["started_at"]:
+                log(f"{user_login} | STILL LIVE")
                 try:
                     response = edit_webhook(
-                        v["webhook_url"], db[k]["message_id"], webhook
+                        streamer["webhook_url"], db[user_login]["message_id"], webhook
                     )
                     if response.status_code == 404:
-                        del db[k]
+                        log("Webhook not found")
+                        del db[user_login]
                 except:
                     log("Webhook edit failed")
-            if k not in db.keys():
-                log(f"{k} | NOW LIVE")
-                if k in db.keys() and "message_id" in db[k]:
-                    edit_was_live(k, v)
+            if user_login not in db.keys():
+                log(f"{user_login} | NOW LIVE")
+                if user_login in db.keys() and "message_id" in db[user_login]:
+                    edit_was_live(user_login, streamer)
                 try:
-                    response = create_webhook(v["webhook_url"], webhook)
-                    db[k] = {
+                    response = create_webhook(streamer["webhook_url"], webhook)
+                    db[user_login] = {
                         "message_id": response.json()["id"],
                         "started_at": started_at,
                     }
                 except:
                     log("Webhook create failed")
         else:
-            if k in db.keys() and "message_id" in db[k]:
-                log(f"{k} | WAS LIVE")
-                edit_was_live(k, v)
+            if user_login in db.keys() and "message_id" in db[user_login]:
+                log(f"{user_login} | WAS LIVE")
+                edit_was_live(user_login, streamer)
     time.sleep(30)
