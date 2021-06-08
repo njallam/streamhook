@@ -1,4 +1,5 @@
 import json
+import logging
 import os
 import requests
 import shelve
@@ -6,8 +7,8 @@ import signal
 import sys
 import time
 import twitch
-from datetime import date, datetime
 
+logging.basicConfig(format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO)
 signal.signal(signal.SIGINT, lambda *args: sys.exit(0))
 
 try:
@@ -31,10 +32,6 @@ helix = twitch.Helix(
 )
 
 
-def log(message):
-    print(datetime.now(), "|", message)
-
-
 def create_webhook(url, webhook):
     return discord_session.post(url, json=webhook, params={"wait": True})
 
@@ -49,9 +46,9 @@ def edit_was_live(user_login, streamer):
         edit_webhook(streamer["webhook_url"], db[user_login]["message_id"], webhook)
         del db[user_login]
     except:
-        log("Webhook edit failed")
+        logging.warning("Webhook edit failed")
 
-log("Now running")
+logging.info("Now running")
 
 while True:
     streams = {}
@@ -63,7 +60,7 @@ while True:
     except twitch.helix.resources.streams.StreamNotFound:
         pass
     except:
-        log("Get streams failed")
+        logging.warning("Get streams failed")
 
     for user_login, streamer in streamers.items():
         if user_login in streams.keys():
@@ -98,18 +95,18 @@ while True:
                 ],
             }
             if user_login in db.keys() and started_at == db[user_login]["started_at"]:
-                log(f"{user_login} | STILL LIVE")
+                logging.info(f"{user_login} | STILL LIVE")
                 try:
                     response = edit_webhook(
                         streamer["webhook_url"], db[user_login]["message_id"], webhook
                     )
                     if response.status_code == 404:
-                        log("Webhook not found")
+                        logging.warning("Webhook not found")
                         del db[user_login]
                 except:
-                    log("Webhook edit failed")
+                    logging.warning("Webhook edit failed")
             if user_login not in db.keys():
-                log(f"{user_login} | NOW LIVE")
+                logging.info(f"{user_login} | NOW LIVE")
                 if user_login in db.keys() and "message_id" in db[user_login]:
                     edit_was_live(user_login, streamer)
                 try:
@@ -119,9 +116,9 @@ while True:
                         "started_at": started_at,
                     }
                 except:
-                    log("Webhook create failed")
+                    logging.warning("Webhook create failed")
         else:
             if user_login in db.keys() and "message_id" in db[user_login]:
-                log(f"{user_login} | WAS LIVE")
+                logging.info(f"{user_login} | WAS LIVE")
                 edit_was_live(user_login, streamer)
     time.sleep(30)
