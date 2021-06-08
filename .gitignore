@@ -3,5 +3,4 @@ __pycache__/
 *$py.class
 
 .env
-streamers.json
-shelve.db
+data/

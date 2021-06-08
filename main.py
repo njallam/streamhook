@@ -7,16 +7,19 @@ import sys
 import time
 import twitch
 from datetime import date, datetime
-from dotenv import load_dotenv
 
 signal.signal(signal.SIGINT, lambda *args: sys.exit(0))
 
-load_dotenv()
+try:
+    from dotenv import load_dotenv
+    load_dotenv()
+except ImportError:
+    pass
 
-with open("streamers.json") as f:
+with open("data/streamers.json") as f:
     streamers = json.load(f)
 
-db = shelve.open("shelve.db")
+db = shelve.open("data/shelve.db")
 discord_session = requests.Session()
 
 # HACK: Use same session for twitch
@@ -48,6 +51,7 @@ def edit_was_live(user_login, streamer):
     except:
         log("Webhook edit failed")
 
+log("Now running")
 
 while True:
     streams = {}
