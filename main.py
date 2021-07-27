@@ -1,11 +1,12 @@
 import json
 import logging
 import os
-import requests
 import shelve
 import signal
 import sys
 import time
+
+import requests
 import twitch
 
 TWITCH_POLL_INTERVAL = os.environ.get("TWITCH_API_INTERVAL", 30)
@@ -37,8 +38,8 @@ def create_webhook(url, webhook):
     return discord_session.post(url, json=webhook, params={"wait": True})
 
 
-def edit_webhook(url, id, webhook):
-    return discord_session.patch(f"{url}/messages/{id}", json=webhook)
+def edit_webhook(url, message_id, webhook):
+    return discord_session.patch(f"{url}/messages/{message_id}", json=webhook)
 
 
 def edit_was_live(user_login, streamer):
@@ -92,7 +93,7 @@ def update_webhooks(streams):
                     and end_times[user_login] > time.time() - STREAM_OFFLINE_DELAY
                 )
             ):
-                logging.info(f"{user_login} | STILL LIVE")
+                logging.info("%s | STILL LIVE", user_login)
                 try:
                     response = edit_webhook(
                         streamer["webhook_url"], db[user_login]["message_id"], webhook
@@ -103,7 +104,7 @@ def update_webhooks(streams):
                 except:
                     logging.warning("Webhook edit failed")
             else:
-                logging.info(f"{user_login} | NOW LIVE")
+                logging.info("%s | NOW LIVE", user_login)
                 if user_login in db.keys():
                     edit_was_live(user_login, streamer)
                 try:
@@ -118,10 +119,10 @@ def update_webhooks(streams):
         elif user_login in db.keys():
             if user_login in end_times:
                 if end_times[user_login] < time.time() - STREAM_OFFLINE_DELAY:
-                    logging.info(f"{user_login} | OFFLINE")
+                    logging.info("%s | OFFLINE", user_login)
                     del db[user_login]
             else:
-                logging.info(f"{user_login} | WAS LIVE")
+                logging.info("%s | WAS LIVE", user_login)
                 end_times[user_login] = time.time()
                 edit_was_live(user_login, streamer)
 
