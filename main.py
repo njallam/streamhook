@@ -1,11 +1,11 @@
 import json
 import logging
 import os
-import shelve
 import signal
 import sys
 import time
 
+import pickledb
 import requests
 import twitch
 
@@ -21,8 +21,7 @@ signal.signal(signal.SIGINT, lambda *args: sys.exit(0))
 with open("data/streamers.json") as f:
     streamers = json.load(f)
 
-db = shelve.open("data/shelve.db")
-end_times = {}
+db = pickledb.load("data/pickle.db", True)
 
 discord_session = requests.Session()
 # HACK: Use same session for twitch
@@ -83,16 +82,20 @@ def get_webhook(user_login, streamer, stream):
 
 def update_webhooks(streams):
     for user_login, streamer in streamers.items():
-        if user_login in streams.keys():
+        if user_login in streams:
             stream = streams[user_login]
             webhook = get_webhook(user_login, streamer, stream)
-            if user_login in db.keys() and (
-                stream.data["started_at"] == db[user_login]["started_at"]
-                or (
-                    user_login in end_times.keys()
-                    and end_times[user_login] > time.time() - STREAM_OFFLINE_DELAY
-                )
-            ):
+
+            if db.exists(user_login) and db.dexists(user_login, "ended_at"):
+                if time.time() - db[user_login]["ended_at"] > STREAM_OFFLINE_DELAY:
+                    logging.info("%s | NEW STREAM", user_login)
+                    edit_was_live(user_login, streamer)
+                    del db[user_login]
+                else:
+                    logging.info("%s | STREAM RECOVERED", user_login)
+                    db.dpop(user_login, "ended_at")
+
+            if db.exists(user_login):
                 logging.info("%s | STILL LIVE", user_login)
                 try:
                     response = edit_webhook(
@@ -103,27 +106,25 @@ def update_webhooks(streams):
                         del db[user_login]
                 except:
                     logging.warning("Webhook edit failed")
-            else:
+            if not db.exists(user_login):
                 logging.info("%s | NOW LIVE", user_login)
-                if user_login in db.keys():
-                    edit_was_live(user_login, streamer)
                 try:
                     response = create_webhook(streamer["webhook_url"], webhook)
+                    message_id = response.json()["id"]
                     db[user_login] = {
-                        "message_id": response.json()["id"],
-                        "started_at": stream.data["started_at"],
+                        "message_id": message_id,
                     }
+                    logging.info("%s | CREATED WEBHOOK '%s'", user_login, message_id)
                 except:
                     logging.warning("Webhook create failed")
-            end_times.pop(user_login, None)
-        elif user_login in db.keys():
-            if user_login in end_times:
-                if end_times[user_login] < time.time() - STREAM_OFFLINE_DELAY:
+        elif db.exists(user_login):
+            if db.dexists(user_login, "ended_at"):
+                if time.time() - db[user_login]["ended_at"] > STREAM_OFFLINE_DELAY:
                     logging.info("%s | OFFLINE", user_login)
                     del db[user_login]
             else:
                 logging.info("%s | WAS LIVE", user_login)
-                end_times[user_login] = time.time()
+                db.dadd(user_login, ("ended_at", time.time()))
                 edit_was_live(user_login, streamer)
 
 
