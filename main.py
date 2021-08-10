@@ -41,17 +41,19 @@ def edit_webhook(url, message_id, webhook):
     return discord_session.patch(f"{url}/messages/{message_id}", json=webhook)
 
 
-def edit_was_live(user_login, streamer):
-    webhook = {"content": streamer["was_live_message"], "embeds": []}
+def edit_was_live(user_login):
+    webhook = {"content": streamers[user_login]["was_live_message"], "embeds": []}
     try:
-        edit_webhook(streamer["webhook_url"], db[user_login]["message_id"], webhook)
+        edit_webhook(
+            streamers[user_login]["webhook_url"], db[user_login]["message_id"], webhook
+        )
     except:
         logging.warning("Webhook edit failed")
 
 
-def get_webhook(user_login, streamer, stream):
+def get_webhook(user_login, stream):
     return {
-        "content": streamer["now_live_message"],
+        "content": streamers[user_login]["now_live_message"],
         "embeds": [
             {
                 "title": stream.title,
@@ -80,49 +82,57 @@ def get_webhook(user_login, streamer, stream):
     }
 
 
+def now_live(user_login, started_at, webhook):
+    logging.info("%s | NOW LIVE", user_login)
+    try:
+        response = create_webhook(streamers[user_login]["webhook_url"], webhook)
+        message_id = response.json()["id"]
+        db[user_login] = {
+            "message_id": message_id,
+            "started_at": started_at,
+        }
+        logging.info("%s | CREATED WEBHOOK '%s'", user_login, message_id)
+    except:
+        logging.warning("Webhook create failed")
+
+
+def still_live(user_login, webhook):
+    logging.info("%s | STILL LIVE", user_login)
+    try:
+        response = edit_webhook(
+            streamers[user_login]["webhook_url"], db[user_login]["message_id"], webhook
+        )
+        if response.status_code == 404:
+            logging.warning("Webhook not found")
+            del db[user_login]
+    except:
+        logging.warning("Webhook edit failed")
+
+
 def update_webhooks(streams):
-    for user_login, streamer in streamers.items():
+    for user_login in streamers:
         if user_login in streams:
             stream = streams[user_login]
             started_at = stream.data["started_at"]
-            webhook = get_webhook(user_login, streamer, stream)
-
-            if db.exists(user_login) and started_at != db[user_login]["started_at"]:
-                if (
-                    db.dexists(user_login, "ended_at")
-                    and time.time() - db[user_login]["ended_at"] <= STREAM_OFFLINE_DELAY
-                ):
-                    logging.info("%s | STREAM RECOVERED", user_login)
-                    db.dadd(user_login, ("started_at", started_at))
-                else:
-                    logging.info("%s | NEW STREAM", user_login)
-                    edit_was_live(user_login, streamer)
-                    del db[user_login]
+            webhook = get_webhook(user_login, stream)
 
             if db.exists(user_login):
-                logging.info("%s | STILL LIVE", user_login)
-                db.dpop(user_login, "ended_at")
-                try:
-                    response = edit_webhook(
-                        streamer["webhook_url"], db[user_login]["message_id"], webhook
-                    )
-                    if response.status_code == 404:
-                        logging.warning("Webhook not found")
-                        del db[user_login]
-                except:
-                    logging.warning("Webhook edit failed")
-            if not db.exists(user_login):
-                logging.info("%s | NOW LIVE", user_login)
-                try:
-                    response = create_webhook(streamer["webhook_url"], webhook)
-                    message_id = response.json()["id"]
-                    db[user_login] = {
-                        "message_id": message_id,
-                        "started_at": started_at,
-                    }
-                    logging.info("%s | CREATED WEBHOOK '%s'", user_login, message_id)
-                except:
-                    logging.warning("Webhook create failed")
+                if db.dexists(user_login, "ended_at"):
+                    ended_at = db.dpop(user_login, "ended_at")
+                    if time.time() - ended_at <= STREAM_OFFLINE_DELAY:
+                        logging.info("%s | STREAM RECOVERED", user_login)
+                        db.dadd(user_login, ("started_at", started_at))
+                        still_live(user_login, webhook)
+                        return
+                if started_at != db[user_login]["started_at"]:
+                    logging.info("%s | NEW STREAM", user_login)
+                    edit_was_live(user_login)
+                    del db[user_login]
+                    now_live(user_login, started_at, webhook)
+                else:
+                    still_live(user_login, webhook)
+            else:
+                now_live(user_login, started_at, webhook)
         elif db.exists(user_login):
             if db.dexists(user_login, "ended_at"):
                 if time.time() - db[user_login]["ended_at"] > STREAM_OFFLINE_DELAY:
@@ -131,7 +141,7 @@ def update_webhooks(streams):
             else:
                 logging.info("%s | WAS LIVE", user_login)
                 db.dadd(user_login, ("ended_at", time.time()))
-                edit_was_live(user_login, streamer)
+                edit_was_live(user_login)
 
 
 logging.info("Now running")
