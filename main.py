@@ -124,11 +124,6 @@ def update_webhooks(streams):
                         db.dadd(user_login, ("started_at", started_at))
                         still_live(user_login, webhook)
                         return
-                if started_at != db[user_login]["started_at"]:
-                    logging.info("%s | NEW STREAM", user_login)
-                    edit_was_live(user_login)
-                    del db[user_login]
-                    now_live(user_login, started_at, webhook)
                 else:
                     still_live(user_login, webhook)
             else:
