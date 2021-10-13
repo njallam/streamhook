@@ -65,7 +65,7 @@ def get_webhook(user_login, stream):
                         "{height}", "240"
                     )
                     + "?time="
-                    + str(int(time.time()))
+                    + str(int(time.time() // 600))
                 },
                 "fields": [
                     {
