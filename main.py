@@ -64,6 +64,8 @@ def get_webhook(user_login, stream):
                     "url": stream.thumbnail_url.replace("{width}", "426").replace(
                         "{height}", "240"
                     )
+                    + "?time="
+                    + str(int(time.time()))
                 },
                 "fields": [
                     {
