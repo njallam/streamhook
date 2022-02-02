@@ -1,3 +1,4 @@
+import functools
 import json
 import logging
 import os
@@ -23,10 +24,11 @@ with open("data/streamers.json") as f:
 
 db = pickledb.load("data/pickle.db", True)
 
-discord_session = requests.Session()
+my_session = requests.Session()
+# HACK: Force connection and read timeout for session
+my_session.request = functools.partial(my_session.request, timeout=5)
 # HACK: Use same session for twitch
-twitch_session = requests.Session()
-requests.Session = lambda: twitch_session
+requests.Session = lambda: my_session
 
 helix = twitch.Helix(
     os.environ.get("TWITCH_CLIENT_ID"), os.environ.get("TWITCH_CLIENT_SECRET")
@@ -34,11 +36,11 @@ helix = twitch.Helix(
 
 
 def create_webhook(url, webhook):
-    return discord_session.post(url, json=webhook, params={"wait": True})
+    return my_session.post(url, json=webhook, params={"wait": True})
 
 
 def edit_webhook(url, message_id, webhook):
-    return discord_session.patch(f"{url}/messages/{message_id}", json=webhook)
+    return my_session.patch(f"{url}/messages/{message_id}", json=webhook)
 
 
 def edit_was_live(user_login):
@@ -123,8 +125,8 @@ def update_webhooks(streams):
                     ended_at = db.dpop(user_login, "ended_at")
                     if time.time() - ended_at <= STREAM_OFFLINE_DELAY:
                         logging.info("%s | STREAM RECOVERED", user_login)
-                        db.dadd(user_login, ("started_at", started_at))
                         still_live(user_login, webhook)
+                        db.dadd(user_login, ("started_at", started_at))
                         return
                 else:
                     still_live(user_login, webhook)
@@ -137,8 +139,8 @@ def update_webhooks(streams):
                     del db[user_login]
             else:
                 logging.info("%s | WAS LIVE", user_login)
-                db.dadd(user_login, ("ended_at", time.time()))
                 edit_was_live(user_login)
+                db.dadd(user_login, ("ended_at", time.time()))
 
 
 logging.info("Now running")
