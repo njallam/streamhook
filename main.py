@@ -8,10 +8,9 @@ import time
 
 import pickledb
 import requests
-import twitch
+import twitchAPI
 
 TWITCH_POLL_INTERVAL = os.environ.get("TWITCH_API_INTERVAL", 30)
-TWITCH_ERROR_INTERVAL = os.environ.get("TWITCH_ERROR_INTERVAL", 60)
 STREAM_OFFLINE_DELAY = os.environ.get("STREAM_OFFLINE_DELAY", 600)
 
 logging.basicConfig(
@@ -30,10 +29,9 @@ my_session.request = functools.partial(my_session.request, timeout=5)
 # HACK: Use same session for twitch
 requests.Session = lambda: my_session
 
-helix = twitch.Helix(
+twitch = twitchAPI.Twitch(
     os.environ.get("TWITCH_CLIENT_ID"), os.environ.get("TWITCH_CLIENT_SECRET")
 )
-
 
 def create_webhook(url, webhook):
     return my_session.post(url, json=webhook, params={"wait": True})
@@ -58,26 +56,26 @@ def get_webhook(user_login, stream):
         "content": streamers[user_login]["now_live_message"],
         "embeds": [
             {
-                "title": stream.title,
+                "title": stream["title"],
                 "color": 0x6441A4,
-                "timestamp": stream.data["started_at"],
+                "timestamp": stream["started_at"],
                 "url": f"https://twitch.tv/{user_login}",
                 "image": {
-                    "url": stream.thumbnail_url.replace("{width}", "426").replace(
-                        "{height}", "240"
-                    )
+                    "url": stream["thumbnail_url"]
+                    .replace("{width}", "426")
+                    .replace("{height}", "240")
                     + "?time="
                     + str(int(time.time() // 600))
                 },
                 "fields": [
                     {
                         "name": ":busts_in_silhouette: Viewers",
-                        "value": stream.viewer_count,
+                        "value": stream["viewer_count"],
                         "inline": True,
                     },
                     {
                         "name": ":joystick: Category",
-                        "value": stream.data["game_name"],
+                        "value": stream["game_name"],
                         "inline": True,
                     },
                 ],
@@ -117,7 +115,7 @@ def update_webhooks(streams):
     for user_login in streamers:
         if user_login in streams:
             stream = streams[user_login]
-            started_at = stream.data["started_at"]
+            started_at = stream["started_at"]
             webhook = get_webhook(user_login, stream)
 
             if db.exists(user_login):
@@ -126,7 +124,6 @@ def update_webhooks(streams):
                     if time.time() - ended_at <= STREAM_OFFLINE_DELAY:
                         logging.info("%s | STREAM RECOVERED", user_login)
                         still_live(user_login, webhook)
-                        db.dadd(user_login, ("started_at", started_at))
                         return
                 else:
                     still_live(user_login, webhook)
@@ -143,22 +140,14 @@ def update_webhooks(streams):
                 db.dadd(user_login, ("ended_at", time.time()))
 
 
+user_logins = list(streamers.keys())
+
 logging.info("Now running")
 
 while True:
-    streams = {}
-    try:
-        streams = {
-            stream.data["user_login"]: stream
-            for stream in helix.streams(user_login=streamers.keys())
-        }
-    except twitch.helix.resources.streams.StreamNotFound:
-        pass
-    except:
-        logging.warning("Get streams failed")
-        time.sleep(TWITCH_ERROR_INTERVAL)
-        continue
-
+    streams = {
+        stream["user_login"]: stream
+        for stream in twitch.get_streams(user_login=user_logins)["data"]
+    }
     update_webhooks(streams)
-
     time.sleep(TWITCH_POLL_INTERVAL)
