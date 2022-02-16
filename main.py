@@ -1,5 +1,4 @@
 import functools
-import json
 import logging
 import os
 import signal
@@ -9,6 +8,7 @@ import time
 import pickledb
 import requests
 import twitchAPI
+import yaml
 
 TWITCH_POLL_INTERVAL = os.environ.get("TWITCH_API_INTERVAL", 30)
 STREAM_OFFLINE_DELAY = os.environ.get("STREAM_OFFLINE_DELAY", 600)
@@ -18,8 +18,8 @@ logging.basicConfig(
 )
 signal.signal(signal.SIGINT, lambda *args: sys.exit(0))
 
-with open("data/streamers.json") as f:
-    streamers = json.load(f)
+with open("data/streamers.yaml") as f:
+    streamers = yaml.safe_load(f)
 
 db = pickledb.load("data/pickle.db", True)
 

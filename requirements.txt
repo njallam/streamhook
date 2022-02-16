@@ -1,3 +1,4 @@
 pickledb
+pyyaml
 requests
 twitchAPI
