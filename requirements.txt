@@ -1,4 +1,3 @@
-pickledb
 pyyaml
 requests
 twitchAPI

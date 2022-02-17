@@ -1,11 +1,11 @@
 import functools
+import json
 import logging
 import os
 import signal
 import sys
 import time
 
-import pickledb
 import requests
 import twitchAPI
 import yaml
@@ -13,15 +13,13 @@ import yaml
 TWITCH_POLL_INTERVAL = os.environ.get("TWITCH_API_INTERVAL", 30)
 STREAM_OFFLINE_DELAY = os.environ.get("STREAM_OFFLINE_DELAY", 600)
 
-logging.basicConfig(
-    format="%(asctime)s - %(levelname)s - %(message)s", level=logging.INFO
-)
+logging.basicConfig(format="%(levelname)s - %(message)s", level=logging.INFO)
 signal.signal(signal.SIGINT, lambda *args: sys.exit(0))
 
 with open("data/streamers.yaml") as f:
     streamers = yaml.safe_load(f)
 
-db = pickledb.load("data/pickle.db", True)
+db = json.load(open("data/pickle.db"))
 
 my_session = requests.Session()
 # HACK: Force connection and read timeout for session
@@ -32,6 +30,11 @@ requests.Session = lambda: my_session
 twitch = twitchAPI.Twitch(
     os.environ.get("TWITCH_CLIENT_ID"), os.environ.get("TWITCH_CLIENT_SECRET")
 )
+
+
+def save_db():
+    json.dump(db, open("data/pickle.db", "w"))
+
 
 def create_webhook(url, webhook):
     return my_session.post(url, json=webhook, params={"wait": True})
@@ -85,7 +88,6 @@ def get_webhook(user_login, stream):
 
 
 def now_live(user_login, started_at, webhook):
-    logging.info("%s | NOW LIVE", user_login)
     try:
         response = create_webhook(streamers[user_login]["webhook_url"], webhook)
         message_id = response.json()["id"]
@@ -99,7 +101,6 @@ def now_live(user_login, started_at, webhook):
 
 
 def still_live(user_login, webhook):
-    logging.info("%s | STILL LIVE", user_login)
     try:
         response = edit_webhook(
             streamers[user_login]["webhook_url"], db[user_login]["message_id"], webhook
@@ -107,6 +108,7 @@ def still_live(user_login, webhook):
         if response.status_code == 404:
             logging.warning("Webhook not found")
             del db[user_login]
+            save_db()
     except:
         logging.warning("Webhook edit failed")
 
@@ -117,27 +119,36 @@ def update_webhooks(streams):
             stream = streams[user_login]
             started_at = stream["started_at"]
             webhook = get_webhook(user_login, stream)
-
-            if db.exists(user_login):
-                if db.dexists(user_login, "ended_at"):
-                    ended_at = db.dpop(user_login, "ended_at")
+            if user_login in db:
+                if "ended_at" in db[user_login]:
+                    ended_at = db[user_login]["ended_at"]
+                    del db[user_login]["ended_at"]
                     if time.time() - ended_at <= STREAM_OFFLINE_DELAY:
                         logging.info("%s | STREAM RECOVERED", user_login)
                         still_live(user_login, webhook)
-                        return
+                    else:
+                        logging.info("%s | NEW STREAM", user_login)
+                        edit_was_live(user_login)
+                        now_live(user_login, started_at, webhook)
+                    save_db()
                 else:
+                    logging.info("%s | STILL LIVE", user_login)
                     still_live(user_login, webhook)
             else:
+                logging.info("%s | NOW LIVE", user_login)
                 now_live(user_login, started_at, webhook)
-        elif db.exists(user_login):
-            if db.dexists(user_login, "ended_at"):
+                save_db()
+        elif user_login in db:
+            if "ended_at" in db[user_login]:
                 if time.time() - db[user_login]["ended_at"] > STREAM_OFFLINE_DELAY:
                     logging.info("%s | OFFLINE", user_login)
                     del db[user_login]
+                    save_db()
             else:
                 logging.info("%s | WAS LIVE", user_login)
                 edit_was_live(user_login)
-                db.dadd(user_login, ("ended_at", time.time()))
+                db[user_login]["ended_at"] = time.time()
+                save_db()
 
 
 user_logins = list(streamers.keys())
