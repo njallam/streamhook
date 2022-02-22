@@ -10,8 +10,8 @@ import requests
 import twitchAPI
 import yaml
 
-TWITCH_POLL_INTERVAL = os.environ.get("TWITCH_API_INTERVAL", 30)
-STREAM_OFFLINE_DELAY = os.environ.get("STREAM_OFFLINE_DELAY", 600)
+TWITCH_POLL_INTERVAL = int(os.environ.get("TWITCH_POLL_INTERVAL", "30"))
+STREAM_OFFLINE_DELAY = int(os.environ.get("STREAM_OFFLINE_DELAY", "600"))
 
 logging.basicConfig(format="%(levelname)s - %(message)s", level=logging.INFO)
 signal.signal(signal.SIGINT, lambda *args: sys.exit(0))
